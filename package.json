@@ -1,33 +1,205 @@
-{
-  "name": "vibe-nft-minter",
-  "version": "1.0.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
-  "dependencies": {
-    "next": "14.2.5",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "@coinbase/onchainkit": "^0.30.0",
-    "@coinbase/minikit-react": "^0.0.18",
-    "wagmi": "^2.12.0",
-    "viem": "^2.17.0",
-    "@tanstack/react-query": "^5.51.0",
-    "framer-motion": "^11.3.0"
-  },
-  "devDependencies": {
-    "typescript": "^5.5.0",
-    "@types/node": "^20.14.0",
-    "@types/react": "^18.3.0",
-    "@types/react-dom": "^18.3.0",
-    "tailwindcss": "^3.4.6",
-    "postcss": "^8.4.40",
-    "autoprefixer": "^10.4.19",
-    "eslint": "^8.57.0",
-    "eslint-config-next": "14.2.5"
+"use client";
+
+import { useState } from "react";
+import {
+  useAccount,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
+import { motion, AnimatePresence } from "framer-motion";
+import { CONTRACT_ADDRESS, CONTRACT_ABI, MOODS } from "@/lib/contract";
+import clsx from "clsx";
+
+interface Props {
+  hasSubmittedToday: boolean;
+  todayMoodId: number | null;
+  onSuccess: () => void;
+}
+
+export function MoodSelector({ hasSubmittedToday, todayMoodId, onSuccess }: Props) {
+  const { isConnected } = useAccount();
+  const [selectedMood, setSelectedMood] = useState<number | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+
+  const { writeContract, data: txHash, isPending, error, reset } = useWriteContract();
+
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    hash: txHash,
+  });
+
+  if (isSuccess && !submitted) {
+    setSubmitted(true);
+    onSuccess();
   }
+
+  const handleSubmit = () => {
+    if (selectedMood === null) return;
+    reset();
+    writeContract({
+      address: CONTRACT_ADDRESS,
+      abi: CONTRACT_ABI,
+      functionName: "logMood",
+      args: [selectedMood],
+    });
+  };
+
+  const isLoading = isPending || isConfirming;
+
+  // ── Already submitted today ──
+  if (hasSubmittedToday && todayMoodId !== null) {
+    const mood = MOODS[todayMoodId];
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="text-center py-6 space-y-4"
+      >
+        <motion.div
+          animate={{ rotate: [0, -10, 10, -10, 0], scale: [1, 1.1, 1] }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          className="text-8xl"
+        >
+          {mood.emoji}
+        </motion.div>
+        <div>
+          <h3 className="text-2xl font-bold text-white">
+            Feeling{" "}
+            <span className={`bg-gradient-to-r ${mood.color} bg-clip-text text-transparent`}>
+              {mood.label}
+            </span>{" "}
+            today!
+          </h3>
+          <p className="text-gray-400 mt-1 text-sm">
+            Come back tomorrow to log a new mood ✨
+          </p>
+        </div>
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-sm">
+          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          Stored on Base blockchain forever
+        </div>
+        <div className="pt-2">
+          <button
+            onClick={() => {
+              const text = `I'm feeling ${mood.emoji} ${mood.label} today! Track your mood on-chain 🌈⛓️`;
+              const url = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}`;
+              window.open(url, "_blank");
+            }}
+            className="px-5 py-2 rounded-xl bg-purple-500/20 border border-purple-500/30 text-purple-300 text-sm hover:bg-purple-500/30 transition-colors"
+          >
+            🟣 Share on Farcaster
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
+
+  // ── Not connected ──
+  if (!isConnected) {
+    return (
+      <div className="text-center py-12 space-y-3">
+        <div className="text-6xl">🔗</div>
+        <p className="text-gray-400 text-lg font-medium">Connect your wallet</p>
+        <p className="text-gray-600 text-sm">to start tracking your mood on Base</p>
+      </div>
+    );
+  }
+
+  // ── Mood Selector ──
+  return (
+    <div className="space-y-6">
+      <div className="text-center">
+        <h2 className="text-xl font-bold text-white">How are you feeling today?</h2>
+        <p className="text-gray-500 text-sm mt-1">One mood per day · Stored forever on Base ⛓️</p>
+      </div>
+
+      {/* Mood Grid */}
+      <div className="grid grid-cols-4 gap-3 sm:grid-cols-7">
+        {MOODS.map((mood) => (
+          <motion.button
+            key={mood.id}
+            onClick={() => setSelectedMood(mood.id)}
+            whileHover={{ scale: 1.08, y: -3 }}
+            whileTap={{ scale: 0.95 }}
+            className={clsx(
+              "relative flex flex-col items-center gap-1.5 p-3 rounded-2xl border-2 transition-all duration-150 cursor-pointer",
+              selectedMood === mood.id
+                ? `${mood.border} ${mood.bg} shadow-lg`
+                : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/8"
+            )}
+          >
+            <span className="text-3xl leading-none">{mood.emoji}</span>
+            <span className={clsx("text-[10px] font-semibold", selectedMood === mood.id ? mood.text : "text-gray-500")}>
+              {mood.label}
+            </span>
+            {selectedMood === mood.id && (
+              <motion.div
+                layoutId="check"
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center"
+              >
+                <span className="text-[9px] font-bold">✓</span>
+              </motion.div>
+            )}
+          </motion.button>
+        ))}
+      </div>
+
+      {/* Selected preview */}
+      <AnimatePresence>
+        {selectedMood !== null && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="text-center text-sm text-gray-400"
+          >
+            Selected:{" "}
+            <span className={`font-semibold ${MOODS[selectedMood].text}`}>
+              {MOODS[selectedMood].emoji} {MOODS[selectedMood].label}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Error */}
+      {error && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-red-400 text-sm text-center"
+        >
+          {error.message.includes("AlreadySubmittedToday")
+            ? "⚠️ Already logged today — come back tomorrow!"
+            : error.message.includes("rejected") || error.message.includes("denied")
+            ? "❌ Transaction rejected"
+            : `❌ ${error.message.slice(0, 100)}`}
+        </motion.div>
+      )}
+
+      {/* Submit */}
+      <motion.button
+        onClick={handleSubmit}
+        disabled={selectedMood === null || isLoading}
+        whileHover={!isLoading && selectedMood !== null ? { scale: 1.02 } : {}}
+        whileTap={!isLoading && selectedMood !== null ? { scale: 0.98 } : {}}
+        className={clsx(
+          "w-full py-4 rounded-2xl font-bold text-base transition-all duration-300",
+          selectedMood !== null && !isLoading
+            ? "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40"
+            : "bg-white/5 text-gray-600 cursor-not-allowed border border-white/5"
+        )}
+      >
+        {isLoading ? (
+          <span className="flex items-center justify-center gap-2">
+            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            {isPending ? "Confirm in wallet…" : "Recording on Base…"}
+          </span>
+        ) : (
+          "⛓️ Log My Mood On-Chain"
+        )}
+      </motion.button>
+    </div>
+  );
 }

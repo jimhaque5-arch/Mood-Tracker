@@ -1,29 +1,36 @@
-"use client";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { WagmiProvider } from "wagmi";
-import { wagmiConfig } from "@/lib/wagmi";
-import { useState } from "react";
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
 
-export function Providers({ children }: { children: React.ReactNode }) {
-  // Create QueryClient inside component so it's unique per request (SSR safe)
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 10_000, // 10 seconds
-            retry: 2,
-          },
-        },
-      })
-  );
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  background: #07070f;
+}
 
-  return (
-    <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
-    </WagmiProvider>
-  );
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.4);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.7);
+}
+
+/* Rainbow kit button override */
+[data-rk] button {
+  font-family: inherit !important;
 }
